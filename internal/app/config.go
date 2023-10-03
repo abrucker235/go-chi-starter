@@ -17,7 +17,7 @@ type App struct {
 	logger zerolog.Logger
 }
 
-func NewApp(logger zerolog.Logger) *App {
+func New(logger zerolog.Logger) *App {
 	app := chi.NewRouter()
 	app.Use(cmiddleware.RequestID)
 	app.Use(cmiddleware.RealIP)

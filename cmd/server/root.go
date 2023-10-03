@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/abrucker235/go-chi-starter/internal/app"
+	"github.com/abrucker235/go-chi-starter/internal/state"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -29,10 +30,10 @@ func init() {
 	viper.BindEnv("metrics.enabled", "METRICS-ENABLED")
 	viper.SetDefault("metrics.enabled", "false")
 
-	ServerCMD.Flags().String("metrics-port", "", "Metrics Port")
-	viper.BindPFlag("metrics.port", ServerCMD.Flags().Lookup("metrics-port"))
-	viper.BindEnv("metrics.port", "METRICS-PORT")
-	viper.SetDefault("metrics.port", "9100")
+	ServerCMD.Flags().String("state-port", "", "Application State Port (ready, liveness, metrics)")
+	viper.BindPFlag("state.port", ServerCMD.Flags().Lookup("state-port"))
+	viper.BindEnv("state.port", "METRICS-PORT")
+	viper.SetDefault("state.port", "9080")
 }
 
 func server(cmd *cobra.Command, args []string) {
@@ -41,19 +42,14 @@ func server(cmd *cobra.Command, args []string) {
 	serve, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
 	defer stop()
 
-	application := app.NewApp(logger)
+	application := app.New(logger)
+	state := state.New(logger)
 
 	timeout, cancel := context.WithTimeout(serve, viper.GetDuration("shutdown.gracePeriod"))
 	defer cancel()
 
 	go application.Serve(serve, timeout)
-
-	//TODO: need to start up listner for internal traffic like liveness, readiness, health, metrics
-	if viper.GetBool("metrics.enabled") {
-		go func() {
-
-		}()
-	}
+	go state.Serve(serve, timeout)
 
 	<-serve.Done()
 	//TODO: gracefully shut things down
