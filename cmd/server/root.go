@@ -2,12 +2,12 @@ package server
 
 import (
 	"context"
-	"fmt"
-	"net"
-	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/abrucker235/go-chi-starter/internal/app"
+	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -22,7 +22,7 @@ func init() {
 	ServerCMD.Flags().String("http-port", "", "HTTP Port")
 	viper.BindPFlag("http.port", ServerCMD.Flags().Lookup("http-port"))
 	viper.BindEnv("http.port", "HTTP-PORT")
-	viper.SetDefault("http.port", "3000")
+	viper.SetDefault("http.port", "8080")
 
 	ServerCMD.Flags().Bool("metrics-enabled", false, "Enable Prometheus Metrics")
 	viper.BindPFlag("metrics.enabled", ServerCMD.Flags().Lookup("metrics-enabled"))
@@ -36,22 +36,26 @@ func init() {
 }
 
 func server(cmd *cobra.Command, args []string) {
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
+	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
+
+	serve, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
 	defer stop()
 
-	app_listener, err := net.Listen("tcp", fmt.Sprintf(":%s", viper.GetString("http.port")))
-	if err != nil {
-	}
+	application := app.NewApp(logger)
 
-	var metrics_listener net.Listener
+	timeout, cancel := context.WithTimeout(serve, viper.GetDuration("shutdown.gracePeriod"))
+	defer cancel()
+
+	go application.Serve(serve, timeout)
+
+	//TODO: need to start up listner for internal traffic like liveness, readiness, health, metrics
 	if viper.GetBool("metrics.enabled") {
-		metrics_listener, err = net.Listen("tcp", fmt.Sprintf(":%s", viper.GetString("metrics.port")))
-		if err != nil {
-		}
-		http.Serve(metrics_listener, nil)
+		go func() {
+
+		}()
 	}
 
-	http.Serve(app_listener, nil)
-
-	<-ctx.Done()
+	<-serve.Done()
+	//TODO: gracefully shut things down
+	<-timeout.Done()
 }
